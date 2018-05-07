@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+	<Product Id="*" Name="CageServiceInstaller" Language="1033" Version="1.0.0.0" Manufacturer="Shark Cage Team" UpgradeCode="cad9ee84-2eee-4e61-a996-ec6205feb95e">
+		<Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" />
+
+		<MajorUpgrade DowngradeErrorMessage="A newer version of Shark Cage is already installed." />
+		<MediaTemplate />
+
+		<Feature Id="ProductFeature" Title="CageServiceInstaller" Level="1">
+			<ComponentGroupRef Id="ProductComponents" />
+      <ComponentRef Id="CageService.exe" />
+      <ComponentRef Id="CageManager.exe" />
+      <ComponentRef Id="ImageSelectDialog.exe" />
+      <ComponentRef Id="StarterCMD.exe" />
+      <!--<ComponentRef Id="ApplicationShortcutDesktop" />-->
+		</Feature>
+    <InstallExecuteSequence>
+      <Custom Action='RegisterService' Before='InstallFinalize'/>
+    </InstallExecuteSequence>
+	</Product>
+
+  <Fragment>
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFilesFolder">
+        <Directory Id="INSTALLFOLDER" Name="CageServiceInstaller">
+          <!--<Directory Id="DesktopFolder" Name="Desktop">
+            <Component Id="ApplicationShortcutDesktop" Guid="1b15437d-ccea-4d4d-aa23-a025a37c49e6">
+              <Shortcut Id="StarterCMDDesktopShortcut" Name="Start application in Cage Manager" Description="Start the Cage Manager and an application in the new desktop" Target="[INSTALLFOLDER]StarterCMD.exe" WorkingDirectory="INSTALLFOLDER"/>
+            </Component>
+          </Directory>-->
+        </Directory>
+      </Directory>
+    </Directory>
+    <!-- Override directory to be C:\sharkcage instead under "C:\Program Files" -->
+    <SetProperty Id="INSTALLFOLDER"  Value="[WindowsVolume]\sharkcage\" Before="AppSearch"/>
+  </Fragment>
+
+	<Fragment>
+		<ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
+        <Component Id="CageService.exe" Guid="786cdb28-8758-4db6-a028-6c9cb88257a0">
+           <File Source="$(var.Cage service.TargetPath)" />
+        </Component>
+        <Component Id="CageManager.exe" Guid="14ecc0e0-016b-4b42-b473-a1eff9787cfc">
+           <File Source="$(var.CageManager.TargetPath)" />
+        </Component>
+        <Component Id="ImageSelectDialog.exe" Guid="d3b10737-b40f-42ec-93e0-5bd15e2a8612">
+           <File Source="$(var.ImageSelectDialog.TargetPath)" />
+        </Component>
+        <Component Id="StarterCMD.exe" Guid="3d5c77c3-cb84-4648-9c3e-beb27a70d226">
+           <File Source="$(var.StarterCMD.TargetPath)" />
+        </Component>
+    </ComponentGroup>
+    <CustomAction Id='RegisterService' Directory='INSTALLFOLDER' Execute='deferred' Impersonate='no' ExeCommand='sc create &quot;Cage Service&quot; binPath= &quot;[INSTALLFOLDER]Cage service.exe&quot; obj= &quot;NT AUTHORITY\SYSTEM&quot;' Return='ignore'/>
+	</Fragment>
+</Wix>
