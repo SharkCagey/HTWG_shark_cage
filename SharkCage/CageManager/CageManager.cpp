@@ -3,7 +3,6 @@
 #include "../SharedFunctionality/NetworkManager.h"
 #include "../SharedFunctionality/SharedFunctions.h"
 #include "../SharedFunctionality/CageData.h"
-#include "../SharedFunctionality/tokenLib/groupManipulation.h"
 
 #include "Aclapi.h"
 
@@ -18,23 +17,13 @@
 #pragma comment(lib, "Rpcrt4.lib")
 
 NetworkManager network_manager(ContextType::MANAGER);
-std::optional<std::wstring> generateUuid();
 
 int main()
 {
-	getchar();
 	CageManager cage_manager;
-	
-	SecuritySetup security_setup;
-	//randomize the group name
-	auto uuid_stl_opt = generateUuid();
-	if (!uuid_stl_opt.has_value()) {
-		return 1;
-	}
-	auto uuid_stl = uuid_stl_opt.value();;
 
-	std::wstring group_name = std::wstring(L"shark_cage_group_").append(uuid_stl);
-	auto security_attributes = security_setup.GetSecurityAttributes(group_name);
+	SecuritySetup security_setup;
+	auto security_attributes = security_setup.GetSecurityAttributes();
 
 	if (!security_attributes.has_value())
 	{
@@ -49,7 +38,6 @@ int main()
 
 	if (parse_result != CageMessage::START_PROCESS)
 	{
-		tokenLib::deleteLocalGroup(const_cast<wchar_t*>((group_name.c_str())));
 		std::cout << "Could not process incoming message" << std::endl;
 		return 1;
 	}
@@ -57,7 +45,6 @@ int main()
 	CageData cage_data = { message_data };
 	if (!SharedFunctions::ParseStartProcessMessage(cage_data))
 	{
-		tokenLib::deleteLocalGroup(const_cast<wchar_t*>((group_name.c_str())));
 		std::cout << "Could not process start process message" << std::endl;
 		return 1;
 	}
@@ -67,30 +54,41 @@ int main()
 		&CageManager::StartCage,
 		cage_manager,
 		security_attributes.value(),
-		cage_data,
-		group_name
+		cage_data
 	);
 
 	desktop_thread.join();
-	tokenLib::deleteLocalGroup(const_cast<wchar_t*>((group_name.c_str())));
+
 	return 0;
 }
 
-void CageManager::StartCage(SECURITY_ATTRIBUTES security_attributes, const CageData &cage_data, const std::wstring &group_name)
+void CageManager::StartCage(SECURITY_ATTRIBUTES security_attributes, const CageData &cage_data)
 {
 	// name should be unique every time -> create UUID
-	auto uuid_stl_opt = generateUuid();
-	if (!uuid_stl_opt.has_value()) {
-		return;
-	}
-	auto uuid_stl = uuid_stl_opt.value();
-	HANDLE tokenHandle = nullptr;
-	//TODO: close this handle
-	if (!tokenLib::constructUserTokenWithGroup(const_cast<wchar_t*>((group_name.c_str())), tokenHandle)) {
-		std::cout << "Cannot create required token" << std::endl;
+	UUID uuid;
+	if (::UuidCreate(&uuid) != RPC_S_OK)
+	{
+		std::cout << "Failed to create UUID" << std::endl;
 		return;
 	}
 
+	RPC_WSTR uuid_str;
+	if (::UuidToString(&uuid, &uuid_str) != RPC_S_OK)
+	{
+		std::cout << "Failed to convert UUID to rpc string" << std::endl;
+		return;
+	}
+
+	std::wstring uuid_stl(reinterpret_cast<wchar_t*>(uuid_str));
+	if (uuid_stl.empty())
+	{
+		::RpcStringFree(&uuid_str);
+		std::cout << "Failed to convert UUID rpc string to stl string" << std::endl;
+		return;
+	}
+
+	::RpcStringFree(&uuid_str);
+	
 	const std::wstring DESKTOP_NAME = std::wstring(L"shark_cage_desktop_").append(uuid_stl);
 	const int work_area_width = 300;
 	CageDesktop cage_desktop(
@@ -115,6 +113,8 @@ void CageManager::StartCage(SECURITY_ATTRIBUTES security_attributes, const CageD
 		LABELER_WINDOW_CLASS_NAME
 	);
 
+	//PETER´S ACCESS TOKEN THINGS
+
 	// We need in order to create the process.
 	STARTUPINFO info = {};
 	info.dwFlags = STARTF_USESHOWWINDOW;
@@ -128,7 +128,7 @@ void CageManager::StartCage(SECURITY_ATTRIBUTES security_attributes, const CageD
 	std::vector<wchar_t> path_buf(cage_data.app_path.begin(), cage_data.app_path.end());
 	path_buf.push_back(0);
 
-	if (::CreateProcessAsUser(tokenHandle, path_buf.data(), nullptr, &security_attributes, nullptr, false, 0, nullptr, nullptr, &info, &process_info) == 0)
+	if (::CreateProcess(path_buf.data(), nullptr, &security_attributes, nullptr, FALSE, 0, nullptr, nullptr, &info, &process_info) == 0)
 	{
 		std::cout << "Failed to start process. Error: " << ::GetLastError() << std::endl;
 	}
@@ -138,7 +138,8 @@ void CageManager::StartCage(SECURITY_ATTRIBUTES security_attributes, const CageD
 	{
 		std::vector<wchar_t> additional_app_path_buf(cage_data.additional_app_path->begin(), cage_data.additional_app_path->end());
 		additional_app_path_buf.push_back(0);
-		if(::CreateProcessAsUser(tokenHandle, additional_app_path_buf.data(), nullptr, &security_attributes, nullptr, FALSE, 0, nullptr, nullptr, &info, &process_info_additional_app) == 0)
+
+		if (::CreateProcess(additional_app_path_buf.data(), nullptr, &security_attributes, nullptr, FALSE, 0, nullptr, nullptr, &info, &process_info_additional_app) == 0)
 		{
 			std::cout << "Failed to start additional process. Error: " << GetLastError() << std::endl;
 		}
@@ -306,31 +307,4 @@ BOOL CALLBACK CageManager::GetOpenWindowHandles(_In_ HWND hwnd, _In_ LPARAM l_pa
 	}
 
 	return TRUE;
-}
-
-std::optional<std::wstring> generateUuid() {
-	UUID uuid;
-	if (::UuidCreate(&uuid) != RPC_S_OK)
-	{
-		std::cout << "Failed to create UUID" << std::endl;
-		return std::nullopt;
-	}
-
-	RPC_WSTR uuid_str;
-	if (::UuidToString(&uuid, &uuid_str) != RPC_S_OK)
-	{
-		std::cout << "Failed to convert UUID to rpc string" << std::endl;
-		return std::nullopt;
-	}
-
-	std::wstring uuid_stl(reinterpret_cast<wchar_t*>(uuid_str));
-	if (uuid_stl.empty())
-	{
-		::RpcStringFree(&uuid_str);
-		std::cout << "Failed to convert UUID rpc string to stl string" << std::endl;
-		return std::nullopt;
-	}
-
-	::RpcStringFree(&uuid_str);
-	return uuid_stl;
 }
