@@ -22,7 +22,6 @@ std::optional<std::wstring> generateUuid();
 
 int main()
 {
-	getchar();
 	CageManager cage_manager;
 	
 	SecuritySetup security_setup;
