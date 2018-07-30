@@ -1,7 +1,6 @@
 #include "stdafx.h"
 
 #include "SecuritySetup.h"
-#include <string>
 #include <vector>
 #include <iostream>
 #include <LM.h>
@@ -9,9 +8,9 @@
 
 #pragma comment(lib, "netapi32.lib")
 
-std::optional<SECURITY_ATTRIBUTES> SecuritySetup::GetSecurityAttributes()
+std::optional<SECURITY_ATTRIBUTES> SecuritySetup::GetSecurityAttributes(const std::wstring &group_name)
 {
-	auto group_sid = CreateSID();
+	auto group_sid = CreateSID(group_name);
 	auto access_control_list = CreateACL(std::move(group_sid));
 
 	if (!access_control_list.has_value())
@@ -59,9 +58,8 @@ std::optional<SECURITY_ATTRIBUTES> SecuritySetup::GetSecurityAttributes()
 	return security_attributes;
 }
 
-std::unique_ptr<PSID, decltype(local_free_deleter<PSID>)> SecuritySetup::CreateSID()
+std::unique_ptr<PSID, decltype(local_free_deleter<PSID>)> SecuritySetup::CreateSID(const std::wstring &group_name)
 {
-	std::wstring group_name = L"shark_cage_group";
 	LOCALGROUP_INFO_0 localgroup_info;
 	DWORD buffer_size = 0;
 

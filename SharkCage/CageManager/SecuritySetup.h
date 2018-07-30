@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <optional>
+#include <string>
 
 template<typename T>
 auto local_free_deleter = [&](T resource) { ::LocalFree(resource); };
@@ -17,10 +18,10 @@ public:
 		}
 	}
 
-	std::optional<SECURITY_ATTRIBUTES> GetSecurityAttributes();
+	std::optional<SECURITY_ATTRIBUTES> GetSecurityAttributes(const std::wstring &group_name);
 
 private:
-	std::unique_ptr<PSID, decltype(local_free_deleter<PSID>)> CreateSID();
+	std::unique_ptr<PSID, decltype(local_free_deleter<PSID>)> CreateSID(const std::wstring &group_name);
 	std::optional<PACL> CreateACL(std::unique_ptr<PSID, decltype(local_free_deleter<PSID>)> group_sid);
 
 	PSECURITY_DESCRIPTOR security_descriptor;

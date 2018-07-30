@@ -3,7 +3,7 @@
 class CageManager
 {
 public:
-	void CageManager::StartCage(SECURITY_ATTRIBUTES security_attributes, const CageData &cage_data);
+	void CageManager::StartCage(SECURITY_ATTRIBUTES security_attributes, const CageData &cage_data, const std::wstring &group_name);
 
 private:
 	void StartCageLabeler(
@@ -11,6 +11,7 @@ private:
 		const CageData &cage_data,
 		const int work_area_width,
 		const std::wstring &labeler_window_class_name);
+
 
 	// FIXME: extra class for this? process handling? -> could also do the wait stuff
 	static BOOL CALLBACK GetOpenWindowHandles(_In_ HWND hwnd, _In_ LPARAM l_param);

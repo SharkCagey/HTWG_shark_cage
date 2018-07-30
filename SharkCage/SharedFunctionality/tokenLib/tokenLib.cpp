@@ -13,8 +13,9 @@
 #pragma comment(lib, "netapi32.lib")
 #pragma comment(lib, "Wtsapi32.lib")
 
-ULONG getCurrentSessionID();
+std::optional<HANDLE> getCurrentUserToken();
 bool changeTokenCreationPrivilege(bool privilegeStatus);
+bool changeTcbPrivilege(bool privilegeStatus);
 bool getGroupSid(LPWSTR groupName, PSID &sid);
 bool hasSeCreateTokenPrivilege(const HANDLE processHandle);
 bool hasSeTcbPrivilege(const HANDLE processHandle);
@@ -120,14 +121,14 @@ namespace tokenLib {
 	}
 
 	DLLEXPORT bool constructUserTokenWithGroup(PSID sid, HANDLE &token) {
-		HANDLE userToken = nullptr;
 
 		//get handle to token of current process
-		HANDLE currentProcessHandle = GetCurrentProcess();
-		if (!OpenProcessToken(currentProcessHandle, TOKEN_DUPLICATE | TOKEN_ALL_ACCESS, &userToken)) {
-			wprintf(L"  Cannot aquire template token\n");
+		auto userTokenHandleOpt = getCurrentUserToken();
+		if (!userTokenHandleOpt.has_value()) {
+			std::wcout << L"Cannot aquire template token" << std::endl;
 			return false;
 		}
+		HANDLE userToken = userTokenHandleOpt.value();
 
 		//sample the token into individual structures
 		std::unique_ptr<tokenTemplate> tokenDeconstructed{};
@@ -355,6 +356,23 @@ ULONG getCurrentSessionID() {
 	return 0;
 }
 
+std::optional<HANDLE> getCurrentUserToken() {
+	HANDLE userToken = 0;
+	ULONG sessionId = ::WTSGetActiveConsoleSessionId();
+	if (!changeTcbPrivilege(true)) {
+		std::wcout << L"Cannot aquire SE_TCB_NAME privilege needed" << std::endl;
+		return std::nullopt;
+	}
+	if (!WTSQueryUserToken(sessionId, &userToken)) {
+		std::wcout << L"Cannot query user token";
+		changeTcbPrivilege(false);
+		return std::nullopt;
+	}
+	changeTcbPrivilege(false);
+	return userToken;
+
+}
+
 bool getGroupSid(LPWSTR groupName, PSID &sid) {
 	SID_NAME_USE accountType;
 	DWORD bufferSize = 0, buffer2Size = 0;
@@ -419,9 +437,8 @@ bool setPrivilege(
 	return TRUE;
 }
 
-bool changeTokenCreationPrivilege(bool privilegeStatus) {
+bool changePrivilege(bool privilegeStatus, LPCTSTR privilege) {
 	//keeping this for future debug purposes
-	//will be important if ever implementing token capture for a token having SE_CREATE_TOKEN_NAME included
 	/*
 	DWORD bufferSize = 0;
 	GetUserName(NULL, &bufferSize);
@@ -429,6 +446,7 @@ bool changeTokenCreationPrivilege(bool privilegeStatus) {
 	GetUserName(pUserName, &bufferSize);
 	wprintf(L"User account accessed: %s\n", pUserName);
 	delete[](BYTE*) pUserName;
+	getchar();
 	*/
 
 	HANDLE currentProcessHandle;
@@ -438,8 +456,16 @@ bool changeTokenCreationPrivilege(bool privilegeStatus) {
 		wprintf(L"Error getting token for privilege escalation\n");
 		return false;
 	}
-	return setPrivilege(userTokenHandle, SE_CREATE_TOKEN_NAME, privilegeStatus);
+	return setPrivilege(userTokenHandle, privilege, privilegeStatus);
 	CloseHandle(userTokenHandle);
+}
+
+bool changeTokenCreationPrivilege(bool privilegeStatus) {
+	return changePrivilege(privilegeStatus, SE_CREATE_TOKEN_NAME);
+}
+
+bool changeTcbPrivilege(bool privilegeStatus){
+	return changePrivilege(privilegeStatus, SE_TCB_NAME);
 }
 
 tokenTemplate::tokenTemplate(HANDLE &userToken) {
